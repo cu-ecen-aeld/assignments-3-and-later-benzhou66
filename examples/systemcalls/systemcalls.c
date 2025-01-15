@@ -1,5 +1,11 @@
 #include "systemcalls.h"
-
+#include <sys/types.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <sys/wait.h>
+#include <sys/stat.h>
+#include <stdio.h>
+#include <fcntl.h>
 /**
  * @param cmd the command to execute with system()
  * @return true if the command in @param cmd was executed
@@ -16,8 +22,13 @@ bool do_system(const char *cmd)
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
 */
-
-    return true;
+    int return_code=system(cmd);
+    if (return_code==0){
+      return true;
+    }
+    else {
+      return false;
+    }
 }
 
 /**
@@ -47,7 +58,7 @@ bool do_exec(int count, ...)
     command[count] = NULL;
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
-    command[count] = command[count];
+    //command[count] = command[count];
 
 /*
  * TODO:
@@ -58,10 +69,30 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *
 */
+    pid_t pid = fork();
+    if (pid<0){
+      return false;
+  }
+    else if (pid==0){
+      //child process
+      
+      execv(command[0],command);
+      
+      //return false if the execv fails
+      return false;
+  }
+    else{
+      //parent process
+      int status;
+      wait(&status);
+      if (WIFEXITED(status)){
+        return true;
+    }
+      else{
+        return false;
+    }
+  }
 
-    va_end(args);
-
-    return true;
 }
 
 /**
@@ -93,7 +124,26 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *
 */
 
-    va_end(args);
+    int kidpid = fork();
+    int fd = open(outputfile, O_WRONLY|O_TRUNC|O_CREAT, 0644);
+    if (fd < 0) { perror("open"); abort(); }
+      switch (kidpid = fork()) {
+        case -1: return false;
+        case 0:
+          if (dup2(fd, 1) < 0) {  close(fd); return false; }
+           
+      execv(command[0], command); close(fd); return false;
+    default:
+      close(fd);
+    /* do whatever the parent wants to do. */
+      int status;
+      wait(&status);
+      if (WIFEXITED(status)){
+        return true;
+    }
+      else{
+        return false;
+    }
+}
 
-    return true;
 }
