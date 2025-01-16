@@ -6,6 +6,7 @@
 #include <sys/stat.h>
 #include <stdio.h>
 #include <fcntl.h>
+#include <syslog.h>
 /**
  * @param cmd the command to execute with system()
  * @return true if the command in @param cmd was executed
@@ -75,7 +76,6 @@ bool do_exec(int count, ...)
   }
     else if (pid==0){
       //child process
-      
       execv(command[0],command);
       
       //return false if the execv fails
@@ -84,15 +84,28 @@ bool do_exec(int count, ...)
     else{
       //parent process
       int status;
-      wait(&status);
-      if (WIFEXITED(status)){
-        return true;
-    }
+      pid=wait(&status);
+      syslog(LOG_INFO, "Wait return code: %d status: %X",  pid, status);
+      if (pid<0){
+        syslog(LOG_ERR,"Error occurred during parent proces waiting");
+        return false;}
+    
       else{
-        return false;
+        if(WIFEXITED(status)) {
+	    if(!WEXITSTATUS(status)) {
+	        syslog(LOG_INFO, "waiting process in parent process succeed in do_exec");
+            va_end(args);
+	        return true;
+        } else {
+            syslog(LOG_ERR, "Waiting process in parent process failed in do_exec");
+            va_end(args);
+            return false;
+        }
+      }
     }
   }
-
+    va_end(args);
+    return true;
 }
 
 /**
@@ -128,22 +141,38 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     int fd = open(outputfile, O_WRONLY|O_TRUNC|O_CREAT, 0644);
     if (fd < 0) { perror("open"); abort(); }
       switch (kidpid = fork()) {
-        case -1: return false;
+      //child process returned -1, failed
+        case -1: syslog(LOG_ERR,"Child process reported -1 during exec_redirect");return false;
         case 0:
-          if (dup2(fd, 1) < 0) {  close(fd); return false; }
+          if (dup2(fd, 1) < 0) { syslog(LOG_ERR,"File can't be opened during exec_redirect");close(fd); return false; }
            
-      execv(command[0], command); close(fd); return false;
+      execv(command[0], command); syslog(LOG_ERR,"Can't execute command with execv during exec_redirect"); close(fd); return false;
     default:
       close(fd);
-    /* do whatever the parent wants to do. */
+    
+    //parent process
       int status;
-      wait(&status);
-      if (WIFEXITED(status)){
-        return true;
-    }
+      kidpid=wait(&status);
+      syslog(LOG_INFO, "Wait return code: %d status: %X",  kidpid, status);
+      if (kidpid<0){
+        syslog(LOG_ERR,"Error occurred during parent proces waiting");
+        return false;}
+    
       else{
-        return false;
+        if(WIFEXITED(status)) {
+	    if(!WEXITSTATUS(status)) {
+	        syslog(LOG_INFO, "waiting process in parent process succeed in do_exec");
+            va_end(args);
+	        return true;
+        } else {
+            syslog(LOG_ERR, "Waiting process in parent process failed in do_exec");
+            va_end(args);
+            return false;
+        }
+      }
     }
 }
+    va_end(args);
+    return true;
 
 }
