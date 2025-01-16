@@ -59,7 +59,7 @@ bool do_exec(int count, ...)
     command[count] = NULL;
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
-    //command[count] = command[count];
+    command[count] = command[count];
 
 /*
  * TODO:
@@ -79,7 +79,7 @@ bool do_exec(int count, ...)
       execv(command[0],command);
       
       //return false if the execv fails
-      return false;
+      exit(1);
   }
     else{
       //parent process
@@ -139,17 +139,23 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
 
     int kidpid = fork();
     int fd = open(outputfile, O_WRONLY|O_TRUNC|O_CREAT, 0644);
-    if (fd < 0) { perror("open"); abort(); }
-      switch (kidpid = fork()) {
-      //child process returned -1, failed
-        case -1: syslog(LOG_ERR,"Child process reported -1 during exec_redirect");return false;
-        case 0:
-          if (dup2(fd, 1) < 0) { syslog(LOG_ERR,"File can't be opened during exec_redirect");close(fd); return false; }
-           
-      execv(command[0], command); syslog(LOG_ERR,"Can't execute command with execv during exec_redirect"); close(fd); return false;
-    default:
-      close(fd);
-    
+    if(fd < 0){
+	    return false;
+	    }
+    if(kidpid < 0){
+    //error
+	    return false;
+	    }
+    else if(kidpid == 0) {
+    //child process
+	    kidpid = dup2(fd, 1);
+        close(fd);
+	    if(kidpid < 0)
+		    return false;
+	    execv(command[0], command);
+	    exit(-1);
+    }
+   
     //parent process
       int status;
       kidpid=wait(&status);
@@ -171,7 +177,6 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
         }
       }
     }
-}
     va_end(args);
     return true;
 
